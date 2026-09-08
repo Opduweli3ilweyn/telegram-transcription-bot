@@ -6,7 +6,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 from groq import Groq
 
 # --- YOUR HARDCODED API KEYS ---
-TELEGRAM_BOT_TOKEN = "8940816231:AAEqewPBNCEcZaVVKwKXpt5lcozTpSIFnfg"
+TELEGRAM_BOT_TOKEN = "8940816231:AAGMNZxv92WaY0hMuK8eduY1q0cVD0lTmOo"
 GROQ_API_KEY = "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"
 
 groq_client = Groq(api_key=GROQ_API_KEY)
