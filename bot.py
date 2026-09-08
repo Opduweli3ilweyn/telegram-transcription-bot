@@ -6,7 +6,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from groq import Groq
 import yt_dlp
 
-# Set up API Keys (Can also be set in Render Environment Variables)
+# --- CONFIGURATION & API KEYS ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8940816231:AAGMNZxv92WaY0hMuK8eduY1q0cVD0lTmOo")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
 
@@ -21,7 +21,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"Bot status: Active")
 
     def log_message(self, format, *args):
-        return  # Silence HTTP access logs in console
+        return  # Suppress HTTP access logs in console output
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
@@ -29,21 +29,27 @@ def run_web_server():
     print(f"Health check server listening on port {port}")
     server.serve_forever()
 
-# --- YOUTUBE DOWNLOAD FUNCTION ---
+# --- YOUTUBE AUDIO DOWNLOADER ---
 def download_audio_from_youtube(url, output_path):
     ydl_opts = {
-        'format': 'm4a/bestaudio/best',
+        'format': 'bestaudio/best',
         'outtmpl': output_path,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'm4a',
             'preferredquality': '128',
         }],
-        # Bypass YouTube Bot/Datacenter IP Blocks
+        # Spoof standard browser headers
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
+        },
+        # Use mobile player clients to bypass YouTube datacenter IP blocks
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'web'],
-                'skip': ['hls', 'dash']
+                'player_client': ['android', 'ios', 'mweb'],
+                'player_skip': ['webpage', 'configs'],
             }
         },
         'quiet': True,
@@ -53,7 +59,7 @@ def download_audio_from_youtube(url, output_path):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
 
-# --- TELEGRAM HANDLERS ---
+# --- TELEGRAM BOT HANDLERS ---
 async def start(update, context):
     await update.message.reply_text("مرحباً! أرسل لي رابط فيديو يوتيوب لتفريغه إلى نص عربي.")
 
@@ -70,13 +76,13 @@ async def handle_message(update, context):
         expected_file = audio_file_base + ".m4a"
 
         try:
-            # Download Youtube Audio
+            # Download audio stream
             download_audio_from_youtube(text, audio_file_base)
 
             if not os.path.exists(expected_file):
                 raise FileNotFoundError("فشل حفظ ملف الصوت.")
 
-            # Send to Groq Whisper AI API
+            # Transcribe audio using Groq Whisper Large v3
             with open(expected_file, "rb") as file:
                 transcription = client.audio.transcriptions.create(
                     file=(os.path.basename(expected_file), file.read()),
@@ -93,7 +99,7 @@ async def handle_message(update, context):
 
             await status_msg.edit_text("تم تفريغ النص بنجاح! 👇")
 
-            # Split response if transcript exceeds Telegram message limits (4000 characters)
+            # Split response into chunks if text exceeds Telegram's 4000 character limit
             for i in range(0, len(full_text), 4000):
                 await update.message.reply_text(full_text[i:i+4000])
 
@@ -101,10 +107,10 @@ async def handle_message(update, context):
             await status_msg.edit_text(f"حدث خطأ أثناء التفريغ:\n`{str(e)}`", parse_mode="Markdown")
 
 def main():
-    # Run HTTP Server in background thread
+    # Start web server thread for Render port health checks
     threading.Thread(target=run_web_server, daemon=True).start()
 
-    # Run Telegram Polling Bot
+    # Start Telegram polling
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
