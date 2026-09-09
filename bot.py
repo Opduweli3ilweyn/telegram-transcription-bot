@@ -32,7 +32,8 @@ def run_web_server():
 # --- YOUTUBE AUDIO DOWNLOADER ---
 def download_audio_from_youtube(url, output_path):
     ydl_opts = {
-        'format': 'bestaudio/best',
+        # Flexible format fallback to prevent format-not-available errors
+        'format': 'ba/b',
         'outtmpl': output_path,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
@@ -44,11 +45,9 @@ def download_audio_from_youtube(url, output_path):
         'nocheckcertificate': True,
     }
 
-    # Pass cookies to bypass datacenter IP blocks
+    # Automatically load cookies.txt from root if present
     if os.path.exists("cookies.txt"):
         ydl_opts['cookiefile'] = "cookies.txt"
-    else:
-        raise FileNotFoundError("cookies.txt file not found! Please upload cookies.txt to GitHub.")
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
@@ -70,7 +69,7 @@ async def handle_message(update, context):
         expected_file = audio_file_base + ".m4a"
 
         try:
-            # Download audio stream
+            # Download Youtube Audio
             download_audio_from_youtube(text, audio_file_base)
 
             if not os.path.exists(expected_file):
@@ -93,7 +92,7 @@ async def handle_message(update, context):
 
             await status_msg.edit_text("تم تفريغ النص بنجاح! 👇")
 
-            # Split response into chunks if text exceeds Telegram's 4000 character limit
+            # Split message if character count exceeds Telegram limits (4000 limit)
             for i in range(0, len(full_text), 4000):
                 await update.message.reply_text(full_text[i:i+4000])
 
