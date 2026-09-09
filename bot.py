@@ -4,7 +4,7 @@ import tempfile
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from groq import Groq
-import yt_dlp
+from pytube import YouTube
 
 # --- CONFIGURATION & API KEYS ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8940816231:AAGMNZxv92WaY0hMuK8eduY1q0cVD0lTmOo")
@@ -21,7 +21,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"Bot status: Active")
 
     def log_message(self, format, *args):
-        return  # Suppress HTTP access logs in console output
+        return  # Suppress HTTP access logs
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
@@ -29,28 +29,17 @@ def run_web_server():
     print(f"Health check server listening on port {port}")
     server.serve_forever()
 
-# --- YOUTUBE AUDIO DOWNLOADER ---
-def download_audio_from_youtube(url, output_path):
-    ydl_opts = {
-        # Flexible format fallback to prevent format-not-available errors
-        'format': 'ba/b',
-        'outtmpl': output_path,
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'm4a',
-            'preferredquality': '128',
-        }],
-        'quiet': True,
-        'no_warnings': True,
-        'nocheckcertificate': True,
-    }
-
-    # Automatically load cookies.txt from root if present
-    if os.path.exists("cookies.txt"):
-        ydl_opts['cookiefile'] = "cookies.txt"
-
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+# --- YOUTUBE AUDIO DOWNLOADER USING PYTUBE ---
+def download_audio_from_youtube(url, output_dir):
+    yt = YouTube(url)
+    # Get the audio-only stream directly
+    audio_stream = yt.streams.filter(only_audio=True).first()
+    if not audio_stream:
+        raise Exception("No audio stream available for this video.")
+    
+    # Download the audio file
+    downloaded_file = audio_stream.download(output_path=output_dir, filename="audio.m4a")
+    return downloaded_file
 
 # --- TELEGRAM BOT HANDLERS ---
 async def start(update, context):
@@ -65,20 +54,17 @@ async def handle_message(update, context):
     status_msg = await update.message.reply_text("جاري تنزيل الصوت وتحليله عبر Groq Whisper... ⏳")
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        audio_file_base = os.path.join(tmpdir, "audio")
-        expected_file = audio_file_base + ".m4a"
-
         try:
-            # Download Youtube Audio
-            download_audio_from_youtube(text, audio_file_base)
+            # Download Youtube stream directly via pytube
+            audio_path = download_audio_from_youtube(text, tmpdir)
 
-            if not os.path.exists(expected_file):
+            if not os.path.exists(audio_path):
                 raise FileNotFoundError("فشل حفظ ملف الصوت.")
 
             # Transcribe audio using Groq Whisper Large v3
-            with open(expected_file, "rb") as file:
+            with open(audio_path, "rb") as file:
                 transcription = client.audio.transcriptions.create(
-                    file=(os.path.basename(expected_file), file.read()),
+                    file=(os.path.basename(audio_path), file.read()),
                     model="whisper-large-v3",
                     language="ar",
                     response_format="text"
@@ -92,7 +78,7 @@ async def handle_message(update, context):
 
             await status_msg.edit_text("تم تفريغ النص بنجاح! 👇")
 
-            # Split message if character count exceeds Telegram limits (4000 limit)
+            # Split message if character count exceeds Telegram limits
             for i in range(0, len(full_text), 4000):
                 await update.message.reply_text(full_text[i:i+4000])
 
