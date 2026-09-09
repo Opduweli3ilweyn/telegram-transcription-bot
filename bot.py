@@ -39,21 +39,16 @@ def download_audio_from_youtube(url, output_path):
             'preferredcodec': 'm4a',
             'preferredquality': '128',
         }],
-        # Use iOS & Android VR endpoints to bypass Web PoToken / JS player extraction checks
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['ios', 'android_vr'],
-                'skip': ['webpage', 'configs', 'js']
-            }
-        },
         'quiet': True,
         'no_warnings': True,
         'nocheckcertificate': True,
     }
-    
-    # Check if a cookies file exists in the repo directory and attach it automatically
+
+    # Pass cookies to bypass datacenter IP blocks
     if os.path.exists("cookies.txt"):
         ydl_opts['cookiefile'] = "cookies.txt"
+    else:
+        raise FileNotFoundError("cookies.txt file not found! Please upload cookies.txt to GitHub.")
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
