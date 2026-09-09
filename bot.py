@@ -39,23 +39,22 @@ def download_audio_from_youtube(url, output_path):
             'preferredcodec': 'm4a',
             'preferredquality': '128',
         }],
-        # Spoof standard browser headers
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-us,en;q=0.5',
-        },
-        # Use mobile player clients to bypass YouTube datacenter IP blocks
+        # Use iOS & Android VR endpoints to bypass Web PoToken / JS player extraction checks
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'mweb'],
-                'player_skip': ['webpage', 'configs'],
+                'player_client': ['ios', 'android_vr'],
+                'skip': ['webpage', 'configs', 'js']
             }
         },
         'quiet': True,
         'no_warnings': True,
         'nocheckcertificate': True,
     }
+    
+    # Check if a cookies file exists in the repo directory and attach it automatically
+    if os.path.exists("cookies.txt"):
+        ydl_opts['cookiefile'] = "cookies.txt"
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
 
